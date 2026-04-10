@@ -1,7 +1,5 @@
 // Entry point for the Express server
-const path = require('path');
-// Always load .env from this folder (backend/), not from process.cwd()
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config();
 
 const app = require('./src/app');
 const connectDB = require('./src/config/db');
