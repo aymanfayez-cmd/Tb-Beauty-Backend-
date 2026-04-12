@@ -19,6 +19,7 @@ async function getOrCreateHero() {
 exports.getHeroSettings = async (req, res, next) => {
   try {
     const hero = await getOrCreateHero();
+    res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
     return res.status(200).json({ hero });
   } catch (err) {
     return next(err);
