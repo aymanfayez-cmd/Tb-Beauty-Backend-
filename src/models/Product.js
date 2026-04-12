@@ -26,6 +26,8 @@ const productSchema = new mongoose.Schema(
     isOffer: { type: Boolean, default: false, index: true },
     offerLabel: { type: String, default: 'SALE', trim: true },
     offerPercent: { type: Number, min: 0, max: 100 },
+    /** Fixed QAR off per unit; if set (>0), used instead of offerPercent. */
+    offerDiscountQar: { type: Number, min: 0 },
     offerStart: { type: Date },
     offerEnd: { type: Date },
     images: { type: [String], default: [] },

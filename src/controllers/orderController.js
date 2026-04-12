@@ -84,6 +84,7 @@ exports.listOrders = async (req, res, next) => {
       Order.countDocuments()
     ]);
 
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     return res.status(200).json({
       orders: rows.map(serializeOrder),
       page,
@@ -108,6 +109,7 @@ exports.getOrderById = async (req, res, next) => {
     if (!order) {
       return res.status(404).json({ message: 'Order not found' });
     }
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     return res.status(200).json({ order: serializeOrder(order) });
   } catch (err) {
     return next(err);

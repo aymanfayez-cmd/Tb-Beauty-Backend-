@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Product = require('../models/Product');
 
 function toNumber(val) {
@@ -118,7 +119,7 @@ exports.getProducts = async (req, res, next) => {
 
     // Storefront list view: keep response small & fast.
     const LIST_FIELDS =
-      'name slug price images category brand skinType rating stock isOffer offerLabel offerPercent offerStart offerEnd createdAt';
+      'name slug price images category brand skinType rating stock isOffer offerLabel offerPercent offerDiscountQar offerStart offerEnd createdAt';
 
     // Single aggregation: one DB round-trip, one pass over matching docs (faster than find + count).
     const listProjection = Object.fromEntries(
@@ -197,9 +198,46 @@ exports.getProductBySlug = async (req, res, next) => {
   }
 };
 
+exports.getProductById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      const err = new Error('Product not found');
+      err.statusCode = 404;
+      return next(err);
+    }
+    const product = await Product.findById(id);
+    if (!product) {
+      const err = new Error('Product not found');
+      err.statusCode = 404;
+      return next(err);
+    }
+    return res.status(200).json({ product });
+  } catch (err) {
+    return next(err);
+  }
+};
+
 exports.createProduct = async (req, res, next) => {
   try {
-    const { name, slug, description, category, brand, price, images, stock, skinType, rating, isOffer, offerLabel, offerPercent, offerStart, offerEnd } = req.body;
+    const {
+      name,
+      slug,
+      description,
+      category,
+      brand,
+      price,
+      images,
+      stock,
+      skinType,
+      rating,
+      isOffer,
+      offerLabel,
+      offerPercent,
+      offerDiscountQar,
+      offerStart,
+      offerEnd
+    } = req.body;
 
     if (!name || !category || !brand || price === undefined) {
       return res.status(400).json({ message: 'name, category, brand, and price are required' });
@@ -217,6 +255,7 @@ exports.createProduct = async (req, res, next) => {
       isOffer,
       offerLabel,
       offerPercent,
+      offerDiscountQar,
       offerStart,
       offerEnd,
       images,
