@@ -16,6 +16,18 @@ function escapeRegex(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Short TTL list cache (per instance) — cuts repeat DB work on filter churn / pagination. */
+const listCache = new Map();
+const LIST_CACHE_MS = 18_000;
+const LIST_CACHE_MAX = 80;
+
+function listCacheKey(query) {
+  const keys = Object.keys(query || {}).sort();
+  const norm = {};
+  for (const k of keys) norm[k] = query[k];
+  return JSON.stringify(norm);
+}
+
 exports.getProducts = async (req, res, next) => {
   try {
     const {
@@ -97,21 +109,55 @@ exports.getProducts = async (req, res, next) => {
     const limitNum = Math.min(60, Math.max(1, toNumber(limit) || 12));
     const skip = (pageNum - 1) * limitNum;
 
+    const cacheKey = listCacheKey(req.query);
+    const hit = listCache.get(cacheKey);
+    if (hit && hit.exp > Date.now()) {
+      res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
+      return res.status(200).json(hit.body);
+    }
+
     // Storefront list view: keep response small & fast.
     const LIST_FIELDS =
       'name slug price images category brand skinType rating stock isOffer offerLabel offerPercent offerStart offerEnd createdAt';
 
-    const [products, total] = await Promise.all([
-      Product.find(filter)
-        .select(LIST_FIELDS)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum)
-        .lean(),
-      Product.countDocuments(filter)
+    // Single aggregation: one DB round-trip, one pass over matching docs (faster than find + count).
+    const listProjection = Object.fromEntries(
+      LIST_FIELDS.split(/\s+/)
+        .filter(Boolean)
+        .filter((f) => f !== 'images')
+        .map((f) => [f, 1])
+    );
+    const agg = await Product.aggregate([
+      { $match: filter },
+      {
+        $facet: {
+          products: [
+            { $sort: { createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limitNum },
+            {
+              $project: {
+                ...listProjection,
+                _id: 1,
+                images: {
+                  $cond: {
+                    if: { $isArray: '$images' },
+                    then: { $slice: ['$images', 1] },
+                    else: []
+                  }
+                }
+              }
+            }
+          ],
+          counts: [{ $count: 'total' }]
+        }
+      }
     ]);
+    const bucket = agg[0] || { products: [], counts: [] };
+    const products = bucket.products || [];
+    const total = bucket.counts[0]?.total ?? 0;
 
-    return res.status(200).json({
+    const body = {
       products,
       pagination: {
         page: pageNum,
@@ -119,7 +165,16 @@ exports.getProducts = async (req, res, next) => {
         total,
         pages: Math.max(1, Math.ceil(total / limitNum))
       }
-    });
+    };
+
+    listCache.set(cacheKey, { exp: Date.now() + LIST_CACHE_MS, body });
+    if (listCache.size > LIST_CACHE_MAX) {
+      const first = listCache.keys().next().value;
+      listCache.delete(first);
+    }
+
+    res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
+    return res.status(200).json(body);
   } catch (err) {
     return next(err);
   }
@@ -168,6 +223,7 @@ exports.createProduct = async (req, res, next) => {
       stock
     });
 
+    listCache.clear();
     return res.status(201).json({ product });
   } catch (err) {
     return next(err);
@@ -195,6 +251,7 @@ exports.updateProduct = async (req, res, next) => {
       return next(err);
     }
 
+    listCache.clear();
     return res.status(200).json({ product });
   } catch (err) {
     return next(err);
@@ -212,6 +269,7 @@ exports.deleteProduct = async (req, res, next) => {
       return next(err);
     }
 
+    listCache.clear();
     return res.status(200).json({ message: 'Product deleted' });
   } catch (err) {
     return next(err);
