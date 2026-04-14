@@ -6,6 +6,7 @@ const User = require('../models/User');
 const RewardSettings = require('../models/RewardSettings');
 const { effectiveUnitPrice } = require('../utils/productPrice');
 const { createHostedPayment } = require('../services/paytabsService');
+const { sendOrderWhatsappNotification } = require('../services/whatsappService');
 
 const CART_CURRENCY = (process.env.PAYTABS_CART_CURRENCY || 'QAR').trim();
 const RETURN_URL = (process.env.PAYTABS_RETURN_URL || 'http://localhost:3000/payment-success').trim();
@@ -120,6 +121,22 @@ function parseApproved(body) {
     '';
   const cartId = body.cart_id || body.cartId || '';
   return { approved, tranRef, cartId, paymentResult: pr };
+}
+
+async function notifyOrderToWhatsapp(order, eventType) {
+  try {
+    const result = await sendOrderWhatsappNotification(order, eventType);
+    if (result?.skipped) {
+      // eslint-disable-next-line no-console
+      console.warn(`[WhatsApp notify] skipped: ${result.reason || 'unknown'}`);
+      return;
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[WhatsApp notify] sent for order ${order?._id || order?.cartId || ''}`);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn('[WhatsApp notify] failed:', err.message || err);
+  }
 }
 
 async function getGlobalRewardSettings() {
@@ -377,6 +394,7 @@ exports.createCodOrder = async (req, res, next) => {
         { session }
       );
       await session.commitTransaction();
+      await notifyOrderToWhatsapp(created, 'COD_CONFIRMED');
       return res.status(200).json({
         cart_id: created.cartId,
         order_id: String(created._id)
@@ -491,6 +509,7 @@ exports.paytabsCallback = async (req, res) => {
         }
         await order.save({ session });
         await session.commitTransaction();
+        await notifyOrderToWhatsapp(order, 'PAID_CONFIRMED');
       } catch (e) {
         await session.abortTransaction().catch(() => {});
         await Order.findByIdAndUpdate(order._id, {
