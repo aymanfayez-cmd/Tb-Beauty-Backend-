@@ -1,5 +1,18 @@
 const mongoose = require('mongoose');
 
+const heroSlideSchema = new mongoose.Schema(
+  {
+    imageUrl: { type: String, default: '' },
+    title: { type: String, default: '' },
+    subtitle: { type: String, default: '' },
+    shopButtonText: { type: String, default: '' },
+    buttonColor: { type: String, default: '#FF4D8D' },
+    order: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true }
+  },
+  { _id: false }
+);
+
 const heroSettingsSchema = new mongoose.Schema(
   {
     key: {
@@ -31,6 +44,10 @@ const heroSettingsSchema = new mongoose.Schema(
     buttonColor: {
       type: String,
       default: '#FF4D8D'
+    },
+    slides: {
+      type: [heroSlideSchema],
+      default: []
     }
   },
   { timestamps: true }
