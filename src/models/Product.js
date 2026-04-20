@@ -24,6 +24,7 @@ const productSchema = new mongoose.Schema(
     brand: { type: String, required: true, trim: true, index: true },
     price: { type: Number, required: true, min: 0 },
     isOffer: { type: Boolean, default: false, index: true },
+    isNewArrival: { type: Boolean, default: false, index: true },
     offerLabel: { type: String, default: 'SALE', trim: true },
     offerPercent: { type: Number, min: 0, max: 100 },
     /** Fixed QAR off per unit; if set (>0), used instead of offerPercent. */
@@ -50,6 +51,7 @@ productSchema.index({ price: 1, createdAt: -1 });
 productSchema.index({ category: 1, createdAt: -1 });
 productSchema.index({ brand: 1, createdAt: -1 });
 productSchema.index({ isOffer: 1, createdAt: -1 });
+productSchema.index({ isNewArrival: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Product', productSchema);
 

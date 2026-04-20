@@ -38,6 +38,7 @@ exports.getProducts = async (req, res, next) => {
       minPrice,
       maxPrice,
       isOffer,
+      isNewArrival,
       skinType,
       rating,
       inStock,
@@ -90,6 +91,12 @@ exports.getProducts = async (req, res, next) => {
       filter.isOffer = false;
     }
 
+    if (isNewArrival === 'true') {
+      filter.isNewArrival = true;
+    } else if (isNewArrival === 'false') {
+      filter.isNewArrival = false;
+    }
+
     if (andClauses.length) {
       filter.$and = [...(filter.$and || []), ...andClauses];
     }
@@ -119,7 +126,7 @@ exports.getProducts = async (req, res, next) => {
 
     // Storefront list view: keep response small & fast.
     const LIST_FIELDS =
-      'name slug price images category brand skinType rating stock isOffer offerLabel offerPercent offerDiscountQar offerStart offerEnd createdAt';
+      'name slug price images category brand skinType rating stock isOffer isNewArrival offerLabel offerPercent offerDiscountQar offerStart offerEnd createdAt';
 
     // Single aggregation: one DB round-trip, one pass over matching docs (faster than find + count).
     const listProjection = Object.fromEntries(
@@ -232,6 +239,7 @@ exports.createProduct = async (req, res, next) => {
       skinType,
       rating,
       isOffer,
+      isNewArrival,
       offerLabel,
       offerPercent,
       offerDiscountQar,
@@ -253,6 +261,7 @@ exports.createProduct = async (req, res, next) => {
       skinType,
       rating,
       isOffer,
+      isNewArrival,
       offerLabel,
       offerPercent,
       offerDiscountQar,
