@@ -5,6 +5,7 @@ const heroSlideSchema = new mongoose.Schema(
     imageUrl: { type: String, default: '' },
     title: { type: String, default: '' },
     subtitle: { type: String, default: '' },
+    linkHref: { type: String, default: '/shop' },
     shopButtonText: { type: String, default: '' },
     buttonColor: { type: String, default: '#FF4D8D' },
     order: { type: Number, default: 0 },
