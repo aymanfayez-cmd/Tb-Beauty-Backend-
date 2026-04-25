@@ -115,3 +115,26 @@ exports.getOrderById = async (req, res, next) => {
     return next(err);
   }
 };
+
+/**
+ * DELETE /api/orders/:id — admin: delete single order by Mongo _id
+ */
+exports.deleteOrderById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: 'Invalid order id' });
+    }
+    const deleted = await Order.findByIdAndDelete(id).lean();
+    if (!deleted) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    return res.status(200).json({
+      message: 'Order deleted successfully',
+      order: serializeOrder(deleted)
+    });
+  } catch (err) {
+    return next(err);
+  }
+};

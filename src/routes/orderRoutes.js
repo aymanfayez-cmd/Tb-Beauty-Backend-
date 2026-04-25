@@ -6,5 +6,6 @@ const orderController = require('../controllers/orderController');
 router.get('/mine', authRequired, orderController.listMyOrders);
 router.get('/', adminOnly, orderController.listOrders);
 router.get('/:id', adminOnly, orderController.getOrderById);
+router.delete('/:id', adminOnly, orderController.deleteOrderById);
 
 module.exports = router;
