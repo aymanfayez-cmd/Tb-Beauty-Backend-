@@ -81,12 +81,7 @@ exports.getProducts = async (req, res, next) => {
     if (stockBool === false) filter.stock = 0;
 
     if (isOffer === 'true') {
-      const now = new Date();
       filter.isOffer = true;
-      andClauses.push(
-        { $or: [{ offerStart: { $exists: false } }, { offerStart: null }, { offerStart: { $lte: now } }] },
-        { $or: [{ offerEnd: { $exists: false } }, { offerEnd: null }, { offerEnd: { $gte: now } }] }
-      );
     } else if (isOffer === 'false') {
       filter.isOffer = false;
     }
@@ -114,13 +109,17 @@ exports.getProducts = async (req, res, next) => {
     }
 
     const pageNum = Math.max(1, toNumber(page) || 1);
-    const limitNum = Math.min(60, Math.max(1, toNumber(limit) || 12));
+    const limitNum = Math.min(200, Math.max(1, toNumber(limit) || 12));
     const skip = (pageNum - 1) * limitNum;
 
     const cacheKey = listCacheKey(req.query);
     const hit = listCache.get(cacheKey);
     if (hit && hit.exp > Date.now()) {
-      res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
+      if (isOffer === 'true') {
+        res.set('Cache-Control', 'no-store');
+      } else {
+        res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
+      }
       return res.status(200).json(hit.body);
     }
 
@@ -181,7 +180,11 @@ exports.getProducts = async (req, res, next) => {
       listCache.delete(first);
     }
 
-    res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
+    if (isOffer === 'true') {
+      res.set('Cache-Control', 'no-store');
+    } else {
+      res.set('Cache-Control', 'public, max-age=15, stale-while-revalidate=120');
+    }
     return res.status(200).json(body);
   } catch (err) {
     return next(err);
@@ -278,17 +281,73 @@ exports.createProduct = async (req, res, next) => {
   }
 };
 
+function normalizeOfferUpdates(updates) {
+  if (!updates || typeof updates !== 'object') return updates;
+  if (updates.isOffer !== true) return updates;
+
+  const pct = Number(updates.offerPercent);
+  const flat = Number(updates.offerDiscountQar);
+  const hasPct = Number.isFinite(pct) && pct > 0;
+  const hasFlat = Number.isFinite(flat) && flat > 0;
+  if (!hasPct && !hasFlat) {
+    updates.offerPercent = 10;
+    updates.offerDiscountQar = null;
+  } else if (hasFlat) {
+    updates.offerPercent = null;
+  } else {
+    updates.offerDiscountQar = null;
+  }
+
+  if (updates.offerStart === '') updates.offerStart = null;
+  if (updates.offerEnd === '') updates.offerEnd = null;
+
+  return updates;
+}
+
+const OFFER_UNSET_KEYS = new Set([
+  'offerLabel',
+  'offerPercent',
+  'offerDiscountQar',
+  'offerStart',
+  'offerEnd'
+]);
+
+function buildProductUpdateDoc(updates) {
+  const normalized = normalizeOfferUpdates({ ...updates });
+  const $set = {};
+  const $unset = {};
+
+  for (const [key, val] of Object.entries(normalized)) {
+    if (key === '_id') continue;
+    if (val === null || val === undefined) {
+      if (OFFER_UNSET_KEYS.has(key)) $unset[key] = '';
+      continue;
+    }
+    $set[key] = val;
+  }
+
+  const doc = {};
+  if (Object.keys($set).length) doc.$set = $set;
+  if (Object.keys($unset).length) doc.$unset = $unset;
+  return doc;
+}
+
 exports.updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
 
     // Prevent accidental update of _id
     if (updates && Object.prototype.hasOwnProperty.call(updates, '_id')) {
       delete updates._id;
     }
 
-    const product = await Product.findByIdAndUpdate(id, updates, {
+    const updateDoc = buildProductUpdateDoc(updates);
+    if (!updateDoc.$set && !updateDoc.$unset) {
+      return res.status(400).json({ message: 'No valid fields to update' });
+    }
+
+    const product = await Product.findByIdAndUpdate(id, updateDoc, {
       new: true,
       runValidators: true
     });
